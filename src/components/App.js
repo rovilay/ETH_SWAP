@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Web3 from 'web3';
 
 import Token from '../abis/Token.json'
 import EthSwap from '../abis/EthSwap.json'
 import Navbar from './Navbar';
+import Main from './Main';
 import './App.css';
 
 const App = () => {
@@ -12,6 +13,7 @@ const App = () => {
   const [tokenBalance, setTokenBalance] = useState('0');
   const [ethSwap, setEthSwap] = useState({});
   const [ethBalance, setEthBalance] = useState('0');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() =>{
     loadWeb3();
@@ -50,15 +52,16 @@ const App = () => {
     const ethSwapData = EthSwap.networks[networkId];
 
     if(!ethSwapData) {
-      window.alert('Token contract not deployed to detected network.');
+      window.alert('EthSwap contract not deployed to detected network.');
       return;
     }
 
-    const es = new web3.eth.Contract(ethSwapData.abi, ethSwapData.address);
-    const esBalance = await tk.methods.balanceOf(accounts[0]).call();
+    const es = new web3.eth.Contract(EthSwap.abi, ethSwapData.address);
+    // const esBalance = await tk.methods.balanceOf(accounts[0]).call();
+    // console.log(esBalance);
 
     setEthSwap(es);
-    // setEthBalance(esBalance.toString());
+    setLoading(false);
   }
 
   const loadWeb3 = async() => {
@@ -72,6 +75,36 @@ const App = () => {
     }
   }
 
+  const buyTokens = useCallback((etherAmount) => {
+    setLoading(true);
+    ethSwap.methods.buyTokens()
+      .send({ value: etherAmount, from: account })
+      .on('transactionHash', (hash) => setLoading(false));
+  }, [ethSwap]);
+
+  const sellTokens = useCallback((tokenAmount) => {
+    setLoading(true);
+    // approve transaction then sell
+    token.methods.approve(ethSwap.address, tokenAmount)
+      .send({ from: account })
+      .on('transactionHash', (hash) => {
+        ethSwap.methods.sellTokens(tokenAmount)
+          .send({ from: account })
+          .on('transactionHash', (hash) => {
+            console.log('HASH', hash);
+            setLoading(false)
+          });
+      });
+  }, [token, ethSwap]);
+
+  let content = <Main
+    ethBalance={ethBalance}
+    tokenBalance={tokenBalance}
+    buyTokens={buyTokens}
+    sellTokens={sellTokens}
+  />;
+  if (loading) content = <p id="loader" className="text-center">Loading...</p>;
+
   return (
     <div>
       <Navbar account={account} />
@@ -79,7 +112,7 @@ const App = () => {
         <div className="row">
           <main role="main" className="col-lg-12 d-flex text-center">
             <div className="content mr-auto ml-auto">
-              <h1>Hello world</h1>
+              {content}
             </div>
           </main>
         </div>
